@@ -132,14 +132,16 @@ export default function PembayaranPage() {
                         <button onClick={() => { setSelected(p); setCatatan('') }} title="Detail" className="p-1.5 rounded-lg hover:bg-miq-50 text-muted-foreground hover:text-miq-700 transition-colors">
                           <Eye size={15} />
                         </button>
-                        {p.status === 'Menunggu Validasi' && (
+                        {(p.status === 'Menunggu Validasi' || p.status === 'Belum Bayar') && (
                           <>
-                            <button onClick={() => handleApprove(p.id, p.peserta_id)} title="Approve" className="p-1.5 rounded-lg hover:bg-emerald-50 text-muted-foreground hover:text-emerald-600 transition-colors">
+                            <button onClick={() => handleApprove(p.id, p.peserta_id)} title="Approve (Bayar Lunas)" className="p-1.5 rounded-lg hover:bg-emerald-50 text-muted-foreground hover:text-emerald-600 transition-colors">
                               <Check size={15} />
                             </button>
-                            <button onClick={() => setSelected({ ...p, showReject: true })} title="Reject" className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors">
-                              <X size={15} />
-                            </button>
+                            {p.status === 'Menunggu Validasi' && (
+                              <button onClick={() => setSelected({ ...p, showReject: true })} title="Reject" className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors">
+                                <X size={15} />
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -185,7 +187,7 @@ export default function PembayaranPage() {
             )}
 
             {/* Catatan */}
-            {selected.status === 'Menunggu Validasi' && (
+            {(selected.status === 'Menunggu Validasi' || selected.status === 'Belum Bayar') && (
               <div className="space-y-2">
                 <label className="text-sm font-semibold">Catatan (opsional)</label>
                 <textarea
@@ -193,12 +195,12 @@ export default function PembayaranPage() {
                   rows={2}
                   value={catatan}
                   onChange={e => setCatatan(e.target.value)}
-                  placeholder="Tambahkan catatan validasi..."
+                  placeholder={selected.status === 'Belum Bayar' ? "Contoh: Bayar tunai di tempat" : "Tambahkan catatan validasi..."}
                 />
               </div>
             )}
 
-            {selected.status === 'Menunggu Validasi' && (
+            {(selected.status === 'Menunggu Validasi' || selected.status === 'Belum Bayar') && (
               <div className="flex gap-2 pt-2">
                 <Button
                   variant="success"
@@ -207,17 +209,19 @@ export default function PembayaranPage() {
                   disabled={actionLoading}
                 >
                   {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                  Setujui
+                  {selected.status === 'Belum Bayar' ? 'Setujui (Bayar Tunai)' : 'Setujui'}
                 </Button>
-                <Button
-                  variant="danger"
-                  className="flex-1"
-                  onClick={() => handleReject(selected.id, selected.peserta_id)}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
-                  Tolak
-                </Button>
+                {selected.status === 'Menunggu Validasi' && (
+                  <Button
+                    variant="danger"
+                    className="flex-1"
+                    onClick={() => handleReject(selected.id, selected.peserta_id)}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
+                    Tolak
+                  </Button>
+                )}
               </div>
             )}
           </div>
