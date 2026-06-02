@@ -47,6 +47,11 @@ function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <Link to="/cek-status">
+              <Button variant="ghost" size="sm" className="text-white/70 hover:text-white hover:bg-white/10">
+                Cek Status
+              </Button>
+            </Link>
             <Link to="/daftar">
               <Button variant="gold" size="sm">Daftar Sekarang</Button>
             </Link>
@@ -84,8 +89,13 @@ function Navbar() {
             <Link to="/daftar" onClick={() => setMobileOpen(false)}>
               <Button variant="gold" size="md" className="w-full">Daftar Sekarang</Button>
             </Link>
-            <Link to="/admin/login" onClick={() => setMobileOpen(false)}>
+            <Link to="/cek-status" onClick={() => setMobileOpen(false)}>
               <Button variant="outline" size="md" className="w-full text-white border-white/30 hover:bg-white/10">
+                Cek Status Pendaftaran
+              </Button>
+            </Link>
+            <Link to="/admin/login" onClick={() => setMobileOpen(false)}>
+              <Button variant="ghost" size="sm" className="w-full text-white/60 hover:text-white hover:bg-white/10">
                 Admin Login
               </Button>
             </Link>
@@ -138,11 +148,11 @@ function HeroSection() {
               <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Button>
           </Link>
-          <a href="#profil">
+          <Link to="/cek-status">
             <Button size="xl" className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20">
-              Lihat Informasi
+              Cek Status Pendaftaran
             </Button>
-          </a>
+          </Link>
         </div>
 
         {/* Stats */}

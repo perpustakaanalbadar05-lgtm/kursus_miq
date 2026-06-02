@@ -35,24 +35,31 @@ export default function DashboardPage() {
         supabase.from('sertifikat').select('*', { count: 'exact', head: true }),
         supabase.from('gelombang').select('*', { count: 'exact', head: true }).eq('status_aktif', true),
         supabase.from('peserta').select('*, gelombang(nama)').order('created_at', { ascending: false }).limit(5),
-        supabase.from('gelombang').select('*, peserta(count)').order('created_at', { ascending: false }).limit(5),
+        supabase.from('gelombang').select('*').order('created_at', { ascending: false }).limit(5),
       ])
 
       setStats({ peserta: peserta || 0, valid: valid || 0, kamar: kamar || 0, ruangan: ruangan || 0, sertifikat: sertifikat || 0, gelombang: gelombang || 0 })
       setRecentPeserta(recent || [])
 
-      // Chart data from gelombang
-      const chart = (gelombangList || []).map(g => ({
-        name: g.nama?.substring(0, 12) || '',
-        peserta: g.peserta?.[0]?.count || 0,
-      }))
-      setChartData(chart.reverse())
+      // ✅ FIX: Hitung peserta per gelombang secara terpisah
+      const chartPromises = (gelombangList || []).map(async (g) => {
+        const { count } = await supabase
+          .from('peserta')
+          .select('*', { count: 'exact', head: true })
+          .eq('gelombang_id', g.id)
+        return { name: g.nama?.substring(0, 12) || '', peserta: count || 0 }
+      })
+      const chartResolved = await Promise.all(chartPromises)
+      setChartData(chartResolved.reverse())
 
-      // Kursus pie data
-      const { data: jenisList } = await supabase.rpc('count_by_jenis_kursus').catch(() => ({ data: null }))
-      setKursusData(jenisList || [
-        { name: 'Tartil Pemula', value: Math.floor(peserta * 0.6) },
-        { name: 'Tartil Melanjutkan', value: Math.floor(peserta * 0.4) },
+      // ✅ FIX: Hitung per jenis kursus tanpa RPC
+      const [{ count: pemula }, { count: melanjutkan }] = await Promise.all([
+        supabase.from('peserta').select('*', { count: 'exact', head: true }).eq('jenis_kursus', 'Tartil Pemula'),
+        supabase.from('peserta').select('*', { count: 'exact', head: true }).eq('jenis_kursus', 'Tartil Melanjutkan'),
+      ])
+      setKursusData([
+        { name: 'Tartil Pemula', value: pemula || 0 },
+        { name: 'Tartil Melanjutkan', value: melanjutkan || 0 },
       ])
 
       setLoading(false)

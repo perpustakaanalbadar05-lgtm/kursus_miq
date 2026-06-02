@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store'
 import LandingPage from '@/pages/public/LandingPage'
 import DaftarPage from '@/pages/public/DaftarPage'
 import VerifyPage from '@/pages/public/VerifyPage'
+import CekStatusPage from '@/pages/public/CekStatusPage'
 
 // Admin Pages
 import LoginPage from '@/pages/admin/LoginPage'
@@ -49,6 +50,7 @@ export default function App() {
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/daftar" element={<DaftarPage />} />
+        <Route path="/cek-status" element={<CekStatusPage />} />
         <Route path="/verify/:code" element={<VerifyPage />} />
 
         {/* Auth */}
