@@ -25,12 +25,10 @@ export default function PembayaranPage() {
       .select('*, peserta(*, gelombang(nama))')
       .order('created_at', { ascending: false })
 
-    if (filterStatus) query = query.eq('status', filterStatus)
-
     const { data: rows } = await query
     setData(rows || [])
     setLoading(false)
-  }, [filterStatus])
+  }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -91,6 +89,8 @@ export default function PembayaranPage() {
   // Count pending
   const pendingCount = data.filter(d => d.status === 'Menunggu Validasi').length
 
+  const filteredData = filterStatus ? data.filter(d => d.status === filterStatus) : data
+
   return (
     <div className="space-y-6 page-enter">
       {/* Header */}
@@ -100,7 +100,7 @@ export default function PembayaranPage() {
           <p className="text-muted-foreground text-sm mt-1">
             {filterStatus === 'Menunggu Validasi' && pendingCount > 0
               ? <span className="text-amber-600 font-semibold">{pendingCount} pembayaran menunggu validasi</span>
-              : `${data.length} data ditemukan`
+              : `${filteredData.length} data ditemukan`
             }
           </p>
         </div>
@@ -148,10 +148,10 @@ export default function PembayaranPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} className="py-12 text-center"><Spinner /></td></tr>
-              ) : data.length === 0 ? (
+              ) : filteredData.length === 0 ? (
                 <tr><td colSpan={6}><EmptyState icon={<CreditCard size={48} />} title="Tidak ada data" description="Tidak ada pembayaran dengan filter ini." /></td></tr>
               ) : (
-                data.map((p) => (
+                filteredData.map((p) => (
                   <tr key={p.id} className="border-t border-border/50 tr-hover">
                     <td className="py-3 px-4">
                       <p className="font-semibold">{p.peserta?.nama_santri}</p>
