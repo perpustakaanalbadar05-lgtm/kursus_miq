@@ -1,41 +1,46 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   BookMarked, ChevronRight, ChevronLeft, Check,
-  Download, MessageCircle, Loader2, Upload, Camera, X
+  Download, MessageCircle, Loader2, Upload, X, Plus, Trash2, Users
 } from 'lucide-react'
 import { Button, Input, Select, Card, Alert } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { generateNomorRegistrasi, cn } from '@/utils'
 import { generateBuktiPendaftaran, downloadPdf } from '@/lib/pdf'
 
-const step1Schema = z.object({
-  nama_santri: z.string().min(3, 'Nama minimal 3 karakter'),
+const step0Schema = z.object({
   nama_lembaga: z.string().min(3, 'Nama lembaga wajib diisi'),
   asal_pesantren: z.string().min(3, 'Asal pesantren wajib diisi'),
-})
-const step2Schema = z.object({
   nama_penanggung_jawab: z.string().min(3, 'Nama penanggung jawab wajib diisi'),
-  nomor_penanggung_jawab: z.string().min(10, 'Nomor HP minimal 10 digit').max(15),
+  nomor_penanggung_jawab: z.string().min(10, 'Nomor HP minimal 10 digit').max(15, 'Nomor HP terlalu panjang'),
 })
-const step3Schema = z.object({
-  jenis_kursus: z.enum(['Tartil Pemula', 'Tartil Melanjutkan'], { message: 'Pilih jenis kursus' }),
+
+const step1Schema = z.object({
+  santri_list: z.array(z.object({
+    nama_santri: z.string().min(3, 'Nama santri wajib diisi'),
+    jenis_kursus: z.enum(['Tartil Pemula', 'Tartil Melanjutkan'], { message: 'Pilih jenis kursus' }),
+  })).min(1, 'Minimal 1 santri'),
+})
+
+const step2Schema = z.object({
   gelombang_id: z.string().min(1, 'Pilih gelombang'),
 })
-const schemas = [step1Schema, step2Schema, step3Schema]
+
+const schemas = [step0Schema, step1Schema, step2Schema, z.object({})]
 
 const STEPS = [
-  { label: 'Data Santri', desc: 'Informasi dasar' },
-  { label: 'Penanggung Jawab', desc: 'Kontak & wali' },
-  { label: 'Jenis Kursus', desc: 'Program & gelombang' },
-  { label: 'Konfirmasi', desc: 'Review data' },
+  { label: 'Penanggung Jawab', desc: 'Kontak & Lembaga' },
+  { label: 'Data Santri', desc: 'Daftar peserta kursus' },
+  { label: 'Gelombang', desc: 'Pilihan gelombang' },
+  { label: 'Konfirmasi', desc: 'Review & Submit' },
 ]
 
 // ── KOMPONEN UPLOAD BUKTI PEMBAYARAN ─────────────────────────────────────────
-function UploadBuktiPembayaran({ pesertaId, onSuccess }) {
+function UploadBuktiPembayaran({ pesertaIds, onSuccess }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -54,14 +59,13 @@ function UploadBuktiPembayaran({ pesertaId, onSuccess }) {
   }
 
   const handleUpload = async () => {
-    if (!file || !pesertaId) return
+    if (!file || !pesertaIds || pesertaIds.length === 0) return
     setUploading(true)
     setError('')
     try {
       const ext = file.name.split('.').pop()
-      const path = `payment-proofs/${pesertaId}-${Date.now()}.${ext}`
+      const path = `payment-proofs/${pesertaIds[0]}-${Date.now()}.${ext}`
 
-      // Upload ke Supabase Storage
       const { error: uploadErr } = await supabase.storage
         .from('payment-proofs')
         .upload(path, file, { upsert: true })
@@ -72,20 +76,20 @@ function UploadBuktiPembayaran({ pesertaId, onSuccess }) {
         .from('payment-proofs')
         .getPublicUrl(path)
 
-      // Update record pembayaran
+      // Update record pembayaran untuk SEMUA peserta di batch ini
       await supabase
         .from('pembayaran')
         .update({
           bukti_transfer_url: publicUrl,
           status: 'Menunggu Validasi',
         })
-        .eq('peserta_id', pesertaId)
+        .in('peserta_id', pesertaIds)
 
-      // Update status peserta
+      // Update status peserta untuk SEMUA peserta di batch ini
       await supabase
         .from('peserta')
         .update({ status_pembayaran: 'Menunggu Validasi' })
-        .eq('id', pesertaId)
+        .in('id', pesertaIds)
 
       setDone(true)
       onSuccess?.()
@@ -110,7 +114,7 @@ function UploadBuktiPembayaran({ pesertaId, onSuccess }) {
     <div className="space-y-4">
       <div className="border-2 border-dashed border-miq-200 rounded-2xl p-6 text-center">
         {preview ? (
-          <div className="relative">
+          <div className="relative inline-block">
             <img src={preview} alt="Preview" className="max-h-48 mx-auto rounded-xl object-contain" />
             <button
               onClick={() => { setFile(null); setPreview(null) }}
@@ -158,20 +162,25 @@ function UploadBuktiPembayaran({ pesertaId, onSuccess }) {
   )
 }
 
-// ── SUCCESS STATE ─────────────────────────────────────────────────────────────
-function SuccessState({ peserta, gelombangList }) {
+// ── SUCCESS STATE (MULTIPLE SANTRI) ───────────────────────────────────────────
+function SuccessState({ pesertaList, gelombangList }) {
   const [showUpload, setShowUpload] = useState(false)
   const [uploadDone, setUploadDone] = useState(false)
-  const gelombang = gelombangList.find(g => g.id === peserta.gelombang_id)
+  const gelombang = gelombangList.find(g => g.id === pesertaList[0]?.gelombang_id)
 
   const handleDownloadPDF = async () => {
-    const bytes = await generateBuktiPendaftaran(peserta)
-    downloadPdf(bytes, `bukti-pendaftaran-${peserta.nomor_registrasi}.pdf`)
+    // Generate PDF for each participant
+    for (const p of pesertaList) {
+      const bytes = await generateBuktiPendaftaran(p)
+      downloadPdf(bytes, `bukti-pendaftaran-${p.nomor_registrasi}.pdf`)
+    }
   }
 
+  const pesertaIds = pesertaList.map(p => p.id)
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-miq-50 to-white flex items-center justify-center p-4">
-      <div className="max-w-lg w-full space-y-4">
+    <div className="min-h-screen bg-gradient-to-br from-miq-50 to-white flex items-center justify-center p-4 py-12">
+      <div className="max-w-xl w-full space-y-4">
         {/* Card utama */}
         <div className="bg-white rounded-3xl shadow-2xl shadow-miq-100/80 border border-miq-100 overflow-hidden">
           <div className="bg-gradient-to-br from-miq-700 to-miq-500 p-8 text-center text-white">
@@ -179,34 +188,40 @@ function SuccessState({ peserta, gelombangList }) {
               <Check className="w-10 h-10" />
             </div>
             <h1 className="font-display text-2xl font-bold">Pendaftaran Berhasil!</h1>
-            <p className="text-white/80 text-sm mt-1">Data Anda telah berhasil disimpan</p>
+            <p className="text-white/80 text-sm mt-1">{pesertaList.length} santri berhasil didaftarkan</p>
           </div>
 
           <div className="p-6">
-            {/* Info registrasi */}
-            <div className="bg-miq-50 rounded-2xl p-4 mb-5 space-y-2.5">
-              {[
-                ['No. Registrasi', peserta.nomor_registrasi],
-                ['Nama Santri', peserta.nama_santri],
-                ['Jenis Kursus', peserta.jenis_kursus],
-                ['Kamar', peserta.kamar?.nama_kamar || 'Akan ditentukan'],
-                ['Ruangan', peserta.ruangan?.nama_ruangan || 'Akan ditentukan'],
-                ['Gelombang', gelombang?.nama || peserta.gelombang?.nama || '-'],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{k}</span>
-                  <span className="font-semibold text-miq-800">{v}</span>
-                </div>
-              ))}
+            <div className="bg-miq-50 rounded-2xl p-5 mb-5 space-y-4">
+              <p className="font-semibold text-miq-800 border-b border-miq-100 pb-2">
+                Detail Pendaftaran
+              </p>
+              
+              <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+                {pesertaList.map((p, idx) => (
+                  <div key={p.id} className="bg-white p-3 rounded-xl border border-miq-100 shadow-sm text-sm">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-bold text-miq-800">{idx + 1}. {p.nama_santri}</span>
+                      <span className="font-mono text-xs bg-miq-100 text-miq-700 px-2 py-1 rounded-md">{p.nomor_registrasi}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-muted-foreground mt-2">
+                      <p>Kursus: <span className="font-semibold text-foreground">{p.jenis_kursus}</span></p>
+                      <p>Gelombang: <span className="font-semibold text-foreground">{gelombang?.nama || '-'}</span></p>
+                      <p>Kamar: <span className="font-semibold text-foreground">{p.kamar?.nama_kamar || 'Akan ditentukan'}</span></p>
+                      <p>Ruangan: <span className="font-semibold text-foreground">{p.ruangan?.nama_ruangan || 'Akan ditentukan'}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Steps pembayaran */}
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5">
               <p className="font-semibold text-amber-800 text-sm mb-2">📋 Langkah Selanjutnya:</p>
               <ol className="text-amber-700 text-sm space-y-1 list-decimal list-inside">
-                <li>Download bukti pendaftaran PDF di bawah</li>
-                <li>Lakukan transfer pembayaran ke rekening panitia</li>
-                <li>Upload bukti transfer di bawah ini</li>
+                <li>Download bukti pendaftaran PDF (semua peserta)</li>
+                <li>Lakukan transfer pembayaran total ke rekening panitia</li>
+                <li>Upload bukti transfer (satu foto untuk seluruh pendaftaran ini)</li>
                 <li>Tunggu konfirmasi validasi dari panitia (1×24 jam)</li>
               </ol>
             </div>
@@ -214,7 +229,7 @@ function SuccessState({ peserta, gelombangList }) {
             {/* Tombol-tombol */}
             <div className="space-y-3">
               <Button variant="primary" size="lg" className="w-full" onClick={handleDownloadPDF}>
-                <Download size={18} /> Download Bukti Pendaftaran (PDF)
+                <Download size={18} /> Download Bukti Pendaftaran PDF ({pesertaList.length})
               </Button>
 
               {!uploadDone && (
@@ -225,7 +240,7 @@ function SuccessState({ peserta, gelombangList }) {
                   onClick={() => setShowUpload(v => !v)}
                 >
                   <Upload size={18} />
-                  {showUpload ? 'Tutup Upload' : 'Upload Bukti Pembayaran'}
+                  {showUpload ? 'Tutup Upload' : 'Upload Bukti Pembayaran Total'}
                 </Button>
               )}
 
@@ -246,9 +261,10 @@ function SuccessState({ peserta, gelombangList }) {
         {/* Upload section */}
         {showUpload && !uploadDone && (
           <div className="bg-white rounded-3xl shadow-xl border border-miq-100 p-6">
-            <h3 className="font-display text-lg font-bold text-miq-800 mb-4">Upload Bukti Transfer</h3>
+            <h3 className="font-display text-lg font-bold text-miq-800 mb-2">Upload Bukti Transfer</h3>
+            <p className="text-sm text-muted-foreground mb-4">Satu bukti transfer bisa digunakan untuk memvalidasi {pesertaList.length} santri sekaligus.</p>
             <UploadBuktiPembayaran
-              pesertaId={peserta.id}
+              pesertaIds={pesertaIds}
               onSuccess={() => { setUploadDone(true); setShowUpload(false) }}
             />
           </div>
@@ -261,15 +277,22 @@ function SuccessState({ peserta, gelombangList }) {
 // ── FORM DAFTAR ───────────────────────────────────────────────────────────────
 export default function DaftarPage() {
   const [step, setStep] = useState(0)
-  const [formData, setFormData] = useState({})
+  const [formData, setFormData] = useState({
+    santri_list: [{ nama_santri: '', jenis_kursus: '' }]
+  })
   const [gelombangList, setGelombangList] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(null)
+  const [successList, setSuccessList] = useState(null)
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset, control, watch } = useForm({
     resolver: zodResolver(schemas[step] || z.object({})),
     defaultValues: formData,
+  })
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "santri_list",
   })
 
   useEffect(() => {
@@ -293,63 +316,70 @@ export default function DaftarPage() {
     setLoading(true)
     setError('')
     try {
-      const nomorRegistrasi = generateNomorRegistrasi()
-
-      // ✅ FIX: Auto-assign kamar dengan filter JS bukan supabase.raw()
+      const createdPeserta = []
+      
+      // Ambil kamar & ruangan per gelombang untuk mempercepat auto-assign
       const { data: kamarList } = await supabase
         .from('kamar')
         .select('*')
         .eq('gelombang_id', formData.gelombang_id)
         .order('nomor_kamar')
 
-      // Cari kamar yang masih tersedia (terisi < kapasitas)
-      const kamar = (kamarList || []).find(k => (k.terisi || 0) < k.kapasitas) || null
-
-      // Auto-assign ruangan berdasarkan jenis kursus
       const { data: ruanganList } = await supabase
         .from('ruangan')
         .select('*')
         .eq('gelombang_id', formData.gelombang_id)
-        .eq('jenis_kursus', formData.jenis_kursus)
 
-      const ruangan = ruanganList?.[0] || null
+      // Tracking terisi local to avoid multiple select queries
+      const kamarUsage = [...(kamarList || [])]
 
-      // Insert peserta
-      const { data: peserta, error: pesertaErr } = await supabase
-        .from('peserta')
-        .insert({
-          nomor_registrasi: nomorRegistrasi,
-          gelombang_id: formData.gelombang_id,
-          nama_santri: formData.nama_santri,
-          nama_lembaga: formData.nama_lembaga,
-          asal_pesantren: formData.asal_pesantren,
-          nama_penanggung_jawab: formData.nama_penanggung_jawab,
-          nomor_penanggung_jawab: formData.nomor_penanggung_jawab,
-          jenis_kursus: formData.jenis_kursus,
-          kamar_id: kamar?.id || null,
-          ruangan_id: ruangan?.id || null,
-          status_pembayaran: 'Belum Bayar',
+      // Loop over each santri
+      for (const santri of formData.santri_list) {
+        const nomorRegistrasi = generateNomorRegistrasi()
+
+        // Assign kamar yang terisi < kapasitas
+        let assignedKamar = kamarUsage.find(k => (k.terisi || 0) < k.kapasitas) || null
+        
+        // Assign ruangan berdasarkan jenis_kursus
+        let assignedRuangan = (ruanganList || []).find(r => r.jenis_kursus === santri.jenis_kursus) || null
+
+        // Insert peserta
+        const { data: peserta, error: pesertaErr } = await supabase
+          .from('peserta')
+          .insert({
+            nomor_registrasi: nomorRegistrasi,
+            gelombang_id: formData.gelombang_id,
+            nama_santri: santri.nama_santri,
+            jenis_kursus: santri.jenis_kursus,
+            nama_lembaga: formData.nama_lembaga,
+            asal_pesantren: formData.asal_pesantren,
+            nama_penanggung_jawab: formData.nama_penanggung_jawab,
+            nomor_penanggung_jawab: formData.nomor_penanggung_jawab,
+            kamar_id: assignedKamar?.id || null,
+            ruangan_id: assignedRuangan?.id || null,
+            status_pembayaran: 'Belum Bayar',
+          })
+          .select('*, kamar(*), ruangan(*), gelombang(*)')
+          .single()
+
+        if (pesertaErr) throw pesertaErr
+
+        createdPeserta.push(peserta)
+
+        // Update kamar terisi in DB and locally
+        if (assignedKamar) {
+          assignedKamar.terisi = (assignedKamar.terisi || 0) + 1
+          await supabase.from('kamar').update({ terisi: assignedKamar.terisi }).eq('id', assignedKamar.id)
+        }
+
+        // Buat record pembayaran
+        await supabase.from('pembayaran').insert({
+          peserta_id: peserta.id,
+          status: 'Belum Bayar',
         })
-        .select('*, kamar(*), ruangan(*), gelombang(*)')
-        .single()
-
-      if (pesertaErr) throw pesertaErr
-
-      // Update kamar terisi
-      if (kamar) {
-        await supabase
-          .from('kamar')
-          .update({ terisi: (kamar.terisi || 0) + 1 })
-          .eq('id', kamar.id)
       }
 
-      // Buat record pembayaran
-      await supabase.from('pembayaran').insert({
-        peserta_id: peserta.id,
-        status: 'Belum Bayar',
-      })
-
-      setSuccess(peserta)
+      setSuccessList(createdPeserta)
     } catch (err) {
       setError(err.message || 'Terjadi kesalahan. Silakan coba lagi.')
     } finally {
@@ -357,8 +387,8 @@ export default function DaftarPage() {
     }
   }
 
-  if (success) {
-    return <SuccessState peserta={success} gelombangList={gelombangList} />
+  if (successList) {
+    return <SuccessState pesertaList={successList} gelombangList={gelombangList} />
   }
 
   return (
@@ -369,7 +399,7 @@ export default function DaftarPage() {
             <ChevronLeft size={16} /> Kembali ke Beranda
           </Link>
           <h1 className="font-display text-3xl font-bold text-miq-800">Formulir Pendaftaran</h1>
-          <p className="text-muted-foreground mt-2">Kursus Madrasah Ilmu Al Quran — PP Miftahul Ulum Panyeppen</p>
+          <p className="text-muted-foreground mt-2">Daftarkan santri secara perorangan maupun kelompok (kolektif).</p>
         </div>
 
         {/* Step Indicator */}
@@ -403,26 +433,66 @@ export default function DaftarPage() {
 
             {step === 0 && (
               <div className="space-y-4">
-                <Input label="Nama Santri *" placeholder="Nama lengkap santri" error={errors.nama_santri?.message} {...register('nama_santri')} />
-                <Input label="Nama Lembaga *" placeholder="Nama lembaga/yayasan" error={errors.nama_lembaga?.message} {...register('nama_lembaga')} />
-                <Input label="Asal Pesantren *" placeholder="Nama pesantren asal" error={errors.asal_pesantren?.message} {...register('asal_pesantren')} />
+                <Input label="Nama Penanggung Jawab *" placeholder="Nama wali / koordinator" error={errors.nama_penanggung_jawab?.message} {...register('nama_penanggung_jawab')} />
+                <Input label="Nomor HP Penanggung Jawab *" placeholder="Contoh: 08123456789" type="tel" error={errors.nomor_penanggung_jawab?.message} {...register('nomor_penanggung_jawab')} />
+                <div className="border-t border-dashed border-border pt-4">
+                  <Input label="Nama Lembaga / Yayasan *" placeholder="Contoh: PP Miftahul Ulum" error={errors.nama_lembaga?.message} {...register('nama_lembaga')} className="mb-4" />
+                  <Input label="Asal Pesantren / Daerah *" placeholder="Contoh: Panyeppen, Madura" error={errors.asal_pesantren?.message} {...register('asal_pesantren')} />
+                </div>
               </div>
             )}
 
             {step === 1 && (
-              <div className="space-y-4">
-                <Input label="Nama Penanggung Jawab *" placeholder="Nama wali / orang tua" error={errors.nama_penanggung_jawab?.message} {...register('nama_penanggung_jawab')} />
-                <Input label="Nomor HP Penanggung Jawab *" placeholder="Contoh: 08123456789" type="tel" error={errors.nomor_penanggung_jawab?.message} {...register('nomor_penanggung_jawab')} />
+              <div className="space-y-6">
+                <div className="bg-blue-50 text-blue-800 text-sm p-3 rounded-xl border border-blue-200">
+                  <p>Anda dapat mendaftarkan lebih dari satu santri sekaligus. Klik <strong>Tambah Santri</strong> untuk mendaftarkan santri lainnya.</p>
+                </div>
+                
+                {fields.map((field, index) => (
+                  <div key={field.id} className="relative bg-miq-50 rounded-2xl p-5 border border-miq-100">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-bold text-miq-800 flex items-center gap-2">
+                        <Users size={16} /> Santri #{index + 1}
+                      </h4>
+                      {fields.length > 1 && (
+                        <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      <Input 
+                        label="Nama Santri *" 
+                        placeholder="Nama lengkap santri" 
+                        error={errors.santri_list?.[index]?.nama_santri?.message} 
+                        {...register(`santri_list.${index}.nama_santri`)} 
+                      />
+                      <Select 
+                        label="Jenis Kursus *" 
+                        error={errors.santri_list?.[index]?.jenis_kursus?.message} 
+                        {...register(`santri_list.${index}.jenis_kursus`)}
+                      >
+                        <option value="">-- Pilih Jenis Kursus --</option>
+                        <option value="Tartil Pemula">Tartil Pemula</option>
+                        <option value="Tartil Melanjutkan">Tartil Melanjutkan</option>
+                      </Select>
+                    </div>
+                  </div>
+                ))}
+
+                {errors.santri_list && !Array.isArray(errors.santri_list) && (
+                  <p className="text-red-500 text-sm">{errors.santri_list.message}</p>
+                )}
+
+                <Button type="button" variant="outline" className="w-full border-dashed border-2 hover:bg-miq-50" onClick={() => append({ nama_santri: '', jenis_kursus: '' })}>
+                  <Plus size={16} className="mr-2" /> Tambah Santri Lainnya
+                </Button>
               </div>
             )}
 
             {step === 2 && (
               <div className="space-y-4">
-                <Select label="Jenis Kursus *" error={errors.jenis_kursus?.message} {...register('jenis_kursus')}>
-                  <option value="">-- Pilih Jenis Kursus --</option>
-                  <option value="Tartil Pemula">Tartil Pemula</option>
-                  <option value="Tartil Melanjutkan">Tartil Melanjutkan</option>
-                </Select>
+                <p className="text-sm text-muted-foreground mb-2">Pilih gelombang kursus untuk {formData.santri_list?.length || 1} santri yang didaftarkan.</p>
                 <Select label="Gelombang *" error={errors.gelombang_id?.message} {...register('gelombang_id')}>
                   <option value="">-- Pilih Gelombang --</option>
                   {gelombangList.map((g) => (
@@ -438,26 +508,36 @@ export default function DaftarPage() {
             )}
 
             {step === 3 && (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground mb-4">Periksa kembali data Anda sebelum submit:</p>
-                <div className="bg-miq-50 rounded-2xl p-5 space-y-3">
-                  {[
-                    ['Nama Santri', formData.nama_santri],
-                    ['Nama Lembaga', formData.nama_lembaga],
-                    ['Asal Pesantren', formData.asal_pesantren],
-                    ['Penanggung Jawab', formData.nama_penanggung_jawab],
-                    ['No. HP', formData.nomor_penanggung_jawab],
-                    ['Jenis Kursus', formData.jenis_kursus],
-                    ['Gelombang', gelombangList.find(g => g.id === formData.gelombang_id)?.nama || '-'],
-                  ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between text-sm border-b border-miq-100 pb-2 last:border-0 last:pb-0">
-                      <span className="text-muted-foreground">{k}</span>
-                      <span className="font-semibold text-miq-800">{v || '-'}</span>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Periksa kembali data Anda sebelum submit:</p>
+                
+                <div className="bg-white border border-border rounded-2xl overflow-hidden">
+                  <div className="bg-muted px-4 py-2 font-semibold text-sm">Data Penanggung Jawab</div>
+                  <div className="p-4 space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Nama:</span> <span className="font-medium">{formData.nama_penanggung_jawab}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">No. HP:</span> <span className="font-medium">{formData.nomor_penanggung_jawab}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Lembaga:</span> <span className="font-medium">{formData.nama_lembaga}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Pesantren:</span> <span className="font-medium">{formData.asal_pesantren}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Gelombang:</span> <span className="font-medium">{gelombangList.find(g => g.id === formData.gelombang_id)?.nama || '-'}</span></div>
+                  </div>
                 </div>
+
+                <div className="bg-miq-50 border border-miq-100 rounded-2xl overflow-hidden">
+                  <div className="bg-miq-100/50 px-4 py-2 font-semibold text-sm text-miq-800">
+                    Daftar Santri ({formData.santri_list.length} Orang)
+                  </div>
+                  <div className="divide-y divide-miq-100/50">
+                    {formData.santri_list.map((santri, idx) => (
+                      <div key={idx} className="p-3 px-4 flex justify-between text-sm items-center">
+                        <span className="font-semibold text-miq-800">{idx + 1}. {santri.nama_santri}</span>
+                        <span className="text-xs bg-white border border-miq-100 px-2 py-1 rounded text-muted-foreground">{santri.jenis_kursus}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <Alert type="info">
-                  Dengan menekan <strong>Submit</strong>, data akan disimpan dan Anda akan mendapatkan nomor registrasi.
+                  Dengan menekan <strong>Submit</strong>, data akan disimpan dan Anda akan mendapatkan nomor registrasi masing-masing.
                 </Alert>
               </div>
             )}
