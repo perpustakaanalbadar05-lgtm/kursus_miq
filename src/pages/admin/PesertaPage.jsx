@@ -131,13 +131,13 @@ export default function PesertaPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-card rounded-2xl border border-border overflow-hidden print-area">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden no-print">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
                 {['No. Registrasi', 'Nama Santri', 'Jenis Kursus', 'Kamar', 'Ruangan', 'Gelombang', 'Status', 'Aksi'].map(h => (
-                  <th key={h} className={`text-left py-3 px-4 text-muted-foreground font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${h === 'Aksi' ? 'no-print' : ''}`}>
+                  <th key={h} className="text-left py-3 px-4 text-muted-foreground font-semibold text-xs uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -168,7 +168,7 @@ export default function PesertaPage() {
                     <td className="py-3 px-4">
                       <Badge variant={badgeVariant(p.status_pembayaran)}>{p.status_pembayaran}</Badge>
                     </td>
-                    <td className="py-3 px-4 no-print">
+                    <td className="py-3 px-4">
                       <div className="flex items-center gap-1">
                         <button onClick={() => setSelected(p)} title="Detail" className="p-1.5 rounded-lg hover:bg-miq-50 text-muted-foreground hover:text-miq-700 transition-colors">
                           <Eye size={15} />
@@ -237,6 +237,43 @@ export default function PesertaPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Hidden Print Template */}
+      <div className="hidden print:block print-area bg-white p-8 absolute top-0 left-0 w-full min-h-screen z-50 text-black">
+        <div className="text-center border-b-2 border-black pb-4 mb-6">
+          <h1 className="text-2xl font-bold uppercase">Laporan Data Peserta</h1>
+          <p className="text-lg">Madrasah Ilmu Al Quran PP Miftahul Ulum Panyeppen</p>
+          <p className="text-sm mt-1">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+        </div>
+
+        <table className="w-full border-collapse border border-black mb-6 text-sm">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border border-black px-4 py-2">No</th>
+              <th className="border border-black px-4 py-2">No. Registrasi</th>
+              <th className="border border-black px-4 py-2">Nama Santri</th>
+              <th className="border border-black px-4 py-2">Jenis Kursus</th>
+              <th className="border border-black px-4 py-2">Kamar & Ruangan</th>
+              <th className="border border-black px-4 py-2">Status Pembayaran</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((p, idx) => (
+              <tr key={p.id}>
+                <td className="border border-black px-4 py-2 text-center">{idx + 1}</td>
+                <td className="border border-black px-4 py-2 text-center font-mono">{p.nomor_registrasi}</td>
+                <td className="border border-black px-4 py-2">{p.nama_santri}</td>
+                <td className="border border-black px-4 py-2 text-center">{p.jenis_kursus}</td>
+                <td className="border border-black px-4 py-2 text-center">
+                  {p.kamar?.nama_kamar || '-'}<br/>
+                  <span className="text-xs text-gray-600">{p.ruangan?.nama_ruangan || '-'}</span>
+                </td>
+                <td className="border border-black px-4 py-2 text-center">{p.status_pembayaran}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
