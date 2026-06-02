@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Check, X, Eye, CreditCard, Upload, Loader2 } from 'lucide-react'
+import { Check, X, Eye, CreditCard, Upload, Loader2, Printer, RotateCcw } from 'lucide-react'
 import { Button, Badge, Select, Modal, Alert, EmptyState, Spinner, Card, CardContent } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { formatDate } from '@/utils'
@@ -15,6 +15,8 @@ export default function PembayaranPage() {
   const [selected, setSelected] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [catatan, setCatatan] = useState('')
+  const [printData, setPrintData] = useState(null)
+  const [biayaPerPeserta, setBiayaPerPeserta] = useState(150000) // Default biaya
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -52,6 +54,38 @@ export default function PembayaranPage() {
     setSelected(null)
     setActionLoading(false)
     fetchData()
+  }
+
+  const handleCancel = async (pembayaranId, pesertaId) => {
+    if (!window.confirm('Yakin ingin membatalkan status pembayaran ini menjadi Belum Bayar?')) return
+    setActionLoading(true)
+    await Promise.all([
+      supabase.from('pembayaran').update({ status: 'Belum Bayar', catatan: 'Dibatalkan admin', validated_by: profile?.id, validated_at: null }).eq('id', pembayaranId),
+      supabase.from('peserta').update({ status_pembayaran: 'Belum Bayar' }).eq('id', pesertaId),
+    ])
+    setSelected(null)
+    setActionLoading(false)
+    fetchData()
+  }
+
+  const handlePrintKuitansi = async (p) => {
+    // Fetch all peserta with the same penanggung jawab
+    const { data: siblings } = await supabase
+      .from('peserta')
+      .select('*, gelombang(nama)')
+      .eq('nomor_penanggung_jawab', p.peserta?.nomor_penanggung_jawab)
+    
+    setPrintData({
+      penanggung_jawab: p.peserta?.nama_penanggung_jawab,
+      nomor_hp: p.peserta?.nomor_penanggung_jawab,
+      tanggal: new Date().toISOString(),
+      items: siblings || [],
+      biayaPerPeserta: biayaPerPeserta
+    })
+    
+    setTimeout(() => {
+      window.print()
+    }, 500)
   }
 
   // Count pending
@@ -144,6 +178,16 @@ export default function PembayaranPage() {
                             )}
                           </>
                         )}
+                        {(p.status === 'Valid' || p.status === 'Ditolak') && (
+                          <button onClick={() => handleCancel(p.id, p.peserta_id)} title="Batalkan" className="p-1.5 rounded-lg hover:bg-amber-50 text-muted-foreground hover:text-amber-600 transition-colors">
+                            <RotateCcw size={15} />
+                          </button>
+                        )}
+                        {p.status === 'Valid' && (
+                          <button onClick={() => handlePrintKuitansi(p)} title="Cetak Kuitansi" className="p-1.5 rounded-lg hover:bg-miq-50 text-muted-foreground hover:text-miq-700 transition-colors">
+                            <Printer size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -227,6 +271,86 @@ export default function PembayaranPage() {
           </div>
         )}
       </Modal>
+
+      {/* Hidden Kuitansi Print Template */}
+      {printData && (
+        <div className="hidden print-area print:block bg-white p-8 absolute top-0 left-0 w-full min-h-screen z-50 text-black">
+          <div className="text-center border-b-2 border-black pb-4 mb-6">
+            <h1 className="text-2xl font-bold uppercase">Kuitansi Pembayaran Kursus</h1>
+            <p className="text-lg">Madrasah Ilmu Al Quran PP Miftahul Ulum Panyeppen</p>
+          </div>
+          
+          <div className="flex justify-between mb-8">
+            <div>
+              <p className="mb-1"><span className="inline-block w-32 font-semibold">Telah terima dari</span>: {printData.penanggung_jawab}</p>
+              <p className="mb-1"><span className="inline-block w-32 font-semibold">Nomor HP</span>: {printData.nomor_hp}</p>
+            </div>
+            <div className="text-right">
+              <p className="mb-1"><span className="font-semibold">Tanggal</span>: {formatDate(printData.tanggal)}</p>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse border border-black mb-6">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-black px-4 py-2">No</th>
+                <th className="border border-black px-4 py-2">Nama Santri</th>
+                <th className="border border-black px-4 py-2">No Registrasi</th>
+                <th className="border border-black px-4 py-2">Status</th>
+                <th className="border border-black px-4 py-2">Biaya</th>
+              </tr>
+            </thead>
+            <tbody>
+              {printData.items.map((item, idx) => (
+                <tr key={idx}>
+                  <td className="border border-black px-4 py-2 text-center">{idx + 1}</td>
+                  <td className="border border-black px-4 py-2">{item.nama_santri}</td>
+                  <td className="border border-black px-4 py-2 text-center">{item.nomor_registrasi}</td>
+                  <td className="border border-black px-4 py-2 text-center">{item.status_pembayaran}</td>
+                  <td className="border border-black px-4 py-2 text-right">
+                    Rp {item.status_pembayaran === 'Valid' ? printData.biayaPerPeserta.toLocaleString('id-ID') : 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan="4" className="border border-black px-4 py-2 font-bold text-right">TOTAL</td>
+                <td className="border border-black px-4 py-2 font-bold text-right">
+                  Rp {(printData.items.filter(i => i.status_pembayaran === 'Valid').length * printData.biayaPerPeserta).toLocaleString('id-ID')}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <div className="flex justify-between mt-16 px-12">
+            <div className="text-center">
+              <p className="mb-20">Penyetor</p>
+              <p className="font-bold border-b border-black inline-block px-4">{printData.penanggung_jawab}</p>
+            </div>
+            <div className="text-center">
+              <p className="mb-20">Penerima / Bendahara</p>
+              <p className="font-bold border-b border-black inline-block px-4">( {profile?.user_metadata?.nama || profile?.email || '...................................'} )</p>
+            </div>
+          </div>
+          
+          {/* Controls for setting Biaya (hidden in print) */}
+          <div className="mt-10 p-4 bg-gray-100 border rounded no-print">
+            <p className="font-semibold mb-2">Pengaturan Kuitansi (Tidak ikut tercetak)</p>
+            <div className="flex items-center gap-2">
+              <label>Biaya per santri (Rp): </label>
+              <input 
+                type="number" 
+                value={biayaPerPeserta} 
+                onChange={e => setBiayaPerPeserta(Number(e.target.value))}
+                className="border p-1 rounded"
+              />
+              <Button onClick={() => window.print()} variant="primary" size="sm">Print Ulang</Button>
+              <Button onClick={() => setPrintData(null)} variant="secondary" size="sm">Tutup Kuitansi</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

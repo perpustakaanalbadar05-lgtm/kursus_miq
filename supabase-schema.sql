@@ -178,3 +178,6 @@ INSERT INTO ruangan (gelombang_id, nama_ruangan, kode_ruangan, jenis_kursus)
 SELECT id, 'Ruang Al Fatih', 'ALF', 'Tartil Pemula' FROM gelombang WHERE nama = 'Gelombang 1'
 UNION ALL
 SELECT id, 'Ruang Al Furqan', 'ALFQ', 'Tartil Melanjutkan' FROM gelombang WHERE nama = 'Gelombang 1';
+
+INSERT INTO admins (id, nama, email, role) 
+VALUES ('1186b5c4-9aac-4a76-a4f0-43af6ca8b8fc', 'Super Admin', 'admin@miq.com', 'admin');
