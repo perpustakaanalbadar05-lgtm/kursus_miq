@@ -1,6 +1,7 @@
 -- =============================================
 -- MIQ KURSUS — SUPABASE SQL SCHEMA
 -- Jalankan di Supabase SQL Editor
+-- cholilelgara@gmail.com
 -- =============================================
 
 -- Enable UUID extension
