@@ -122,7 +122,7 @@ function HeroSection() {
         {/* Arabic calligraphy decoration */}
         <div className="mb-6">
           <span className="inline-block bg-gold-500/20 border border-gold-500/40 text-gold-400 text-sm font-semibold px-5 py-2 rounded-full tracking-wider">
-            ﷽ بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ
+            بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ
           </span>
         </div>
 
