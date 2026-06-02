@@ -89,12 +89,15 @@ export default function PesertaPage() {
           <h2 className="font-display text-2xl font-bold text-foreground">Daftar Peserta</h2>
           <p className="text-muted-foreground text-sm mt-1">{data.length} peserta ditemukan</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="secondary" size="sm" onClick={handleExportExcel}>
             <Download size={16} /> Export Excel
           </Button>
           <Button variant="secondary" size="sm" onClick={() => exportToCSV(data, 'peserta.csv')}>
             <Download size={16} /> Export CSV
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => window.print()}>
+            <Download size={16} /> Print Data
           </Button>
         </div>
       </div>
@@ -128,13 +131,13 @@ export default function PesertaPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden print-area">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
                 {['No. Registrasi', 'Nama Santri', 'Jenis Kursus', 'Kamar', 'Ruangan', 'Gelombang', 'Status', 'Aksi'].map(h => (
-                  <th key={h} className="text-left py-3 px-4 text-muted-foreground font-semibold text-xs uppercase tracking-wide whitespace-nowrap">
+                  <th key={h} className={`text-left py-3 px-4 text-muted-foreground font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${h === 'Aksi' ? 'no-print' : ''}`}>
                     {h}
                   </th>
                 ))}
@@ -165,7 +168,7 @@ export default function PesertaPage() {
                     <td className="py-3 px-4">
                       <Badge variant={badgeVariant(p.status_pembayaran)}>{p.status_pembayaran}</Badge>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 no-print">
                       <div className="flex items-center gap-1">
                         <button onClick={() => setSelected(p)} title="Detail" className="p-1.5 rounded-lg hover:bg-miq-50 text-muted-foreground hover:text-miq-700 transition-colors">
                           <Eye size={15} />
