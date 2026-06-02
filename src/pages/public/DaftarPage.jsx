@@ -169,11 +169,11 @@ function SuccessState({ pesertaList, gelombangList }) {
   const gelombang = gelombangList.find(g => g.id === pesertaList[0]?.gelombang_id)
 
   const handleDownloadPDF = async () => {
-    // Generate PDF for each participant
-    for (const p of pesertaList) {
-      const bytes = await generateBuktiPendaftaran(p)
-      downloadPdf(bytes, `bukti-pendaftaran-${p.nomor_registrasi}.pdf`)
-    }
+    const bytes = await generateBuktiPendaftaran(pesertaList)
+    const filename = pesertaList.length > 1 
+      ? `bukti-pendaftaran-kolektif-${pesertaList[0].nomor_registrasi}.pdf`
+      : `bukti-pendaftaran-${pesertaList[0].nomor_registrasi}.pdf`
+    downloadPdf(bytes, filename)
   }
 
   const pesertaIds = pesertaList.map(p => p.id)
