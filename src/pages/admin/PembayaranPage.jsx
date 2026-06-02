@@ -16,7 +16,20 @@ export default function PembayaranPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [catatan, setCatatan] = useState('')
   const [printData, setPrintData] = useState(null)
-  const [biayaPerPeserta, setBiayaPerPeserta] = useState(150000) // Default biaya
+  const [search, setSearch] = useState('')
+  const [selectedRows, setSelectedRows] = useState([])
+  const [jenisKursusMap, setJenisKursusMap] = useState({}) // Untuk nyimpan data biaya per kursus
+
+  // Ambil data jenis kursus (jika tabelnya sudah dibuat)
+  useEffect(() => {
+    supabase.from('jenis_kursus').select('*').then(({ data }) => {
+      if (data) {
+        const map = {}
+        data.forEach(d => map[d.nama] = d.biaya)
+        setJenisKursusMap(map)
+      }
+    })
+  }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -66,19 +79,18 @@ export default function PembayaranPage() {
     fetchData()
   }
 
-  const handlePrintKuitansi = async (p) => {
-    // Fetch all peserta with the same penanggung jawab
-    const { data: siblings } = await supabase
-      .from('peserta')
-      .select('*, gelombang(nama)')
-      .eq('nomor_penanggung_jawab', p.peserta?.nomor_penanggung_jawab)
+  const handlePrintKuitansi = (pesertaList) => {
+    if (!pesertaList || pesertaList.length === 0) return
+    
+    // Group by first person's penanggung jawab
+    const pj = pesertaList[0].peserta?.nama_penanggung_jawab
+    const hp = pesertaList[0].peserta?.nomor_penanggung_jawab
     
     setPrintData({
-      penanggung_jawab: p.peserta?.nama_penanggung_jawab,
-      nomor_hp: p.peserta?.nomor_penanggung_jawab,
+      penanggung_jawab: pj,
+      nomor_hp: hp,
       tanggal: new Date().toISOString(),
-      items: siblings || [],
-      biayaPerPeserta: biayaPerPeserta
+      items: pesertaList.map(p => p.peserta)
     })
     
     setTimeout(() => {
@@ -86,10 +98,32 @@ export default function PembayaranPage() {
     }, 500)
   }
 
+  const handleBulkPrint = () => {
+    const selectedData = data.filter(d => selectedRows.includes(d.id) && d.status === 'Valid')
+    if (selectedData.length === 0) return alert('Pilih setidaknya 1 pembayaran yang berstatus Valid.')
+    handlePrintKuitansi(selectedData)
+  }
+
   // Count pending
   const pendingCount = data.filter(d => d.status === 'Menunggu Validasi').length
 
-  const filteredData = filterStatus ? data.filter(d => d.status === filterStatus) : data
+  const filteredData = data.filter(d => {
+    const matchStatus = filterStatus ? d.status === filterStatus : true
+    const matchSearch = search ? (
+      d.peserta?.nama_santri?.toLowerCase().includes(search.toLowerCase()) || 
+      d.peserta?.nama_penanggung_jawab?.toLowerCase().includes(search.toLowerCase())
+    ) : true
+    return matchStatus && matchSearch
+  })
+
+  const toggleSelectAll = () => {
+    if (selectedRows.length === filteredData.length) setSelectedRows([])
+    else setSelectedRows(filteredData.map(d => d.id))
+  }
+
+  const toggleSelectRow = (id) => {
+    setSelectedRows(prev => prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id])
+  }
 
   return (
     <div className="space-y-6 page-enter">
@@ -111,6 +145,24 @@ export default function PembayaranPage() {
           <option>Valid</option>
           <option>Ditolak</option>
         </Select>
+      </div>
+
+      {/* Action Bar & Search */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1">
+          <input
+            type="text"
+            placeholder="Cari santri atau penanggung jawab..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-border bg-card px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-miq-500/50"
+          />
+        </div>
+        {selectedRows.length > 0 && (
+          <Button variant="primary" onClick={handleBulkPrint}>
+            <Printer size={16} /> Cetak Kuitansi Terpilih ({selectedRows.length})
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -138,7 +190,10 @@ export default function PembayaranPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                {['Peserta', 'Jenis Kursus', 'Gelombang', 'Tanggal Upload', 'Status', 'Aksi'].map(h => (
+                <th className="py-3 px-4 w-10">
+                  <input type="checkbox" checked={selectedRows.length > 0 && selectedRows.length === filteredData.length} onChange={toggleSelectAll} className="w-4 h-4 rounded border-border accent-miq-600" />
+                </th>
+                {['Peserta', 'Penanggung Jawab', 'Jenis Kursus', 'Tanggal Upload', 'Status', 'Aksi'].map(h => (
                   <th key={h} className="text-left py-3 px-4 text-muted-foreground font-semibold text-xs uppercase tracking-wide">
                     {h}
                   </th>
@@ -147,18 +202,27 @@ export default function PembayaranPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="py-12 text-center"><Spinner /></td></tr>
+                <tr><td colSpan={7} className="py-12 text-center"><Spinner /></td></tr>
               ) : filteredData.length === 0 ? (
-                <tr><td colSpan={6}><EmptyState icon={<CreditCard size={48} />} title="Tidak ada data" description="Tidak ada pembayaran dengan filter ini." /></td></tr>
+                <tr><td colSpan={7}><EmptyState icon={<CreditCard size={48} />} title="Tidak ada data" description="Tidak ada pembayaran dengan filter ini." /></td></tr>
               ) : (
                 filteredData.map((p) => (
-                  <tr key={p.id} className="border-t border-border/50 tr-hover">
+                  <tr key={p.id} className="border-t border-border/50 tr-hover cursor-pointer" onClick={(e) => {
+                    if(e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SVG' && e.target.tagName !== 'path' && e.target.type !== 'checkbox') {
+                      toggleSelectRow(p.id)
+                    }
+                  }}>
+                    <td className="py-3 px-4">
+                      <input type="checkbox" checked={selectedRows.includes(p.id)} onChange={() => toggleSelectRow(p.id)} className="w-4 h-4 rounded border-border accent-miq-600" />
+                    </td>
                     <td className="py-3 px-4">
                       <p className="font-semibold">{p.peserta?.nama_santri}</p>
                       <p className="text-xs text-muted-foreground font-mono">{p.peserta?.nomor_registrasi}</p>
                     </td>
+                    <td className="py-3 px-4">
+                      <p className="text-sm">{p.peserta?.nama_penanggung_jawab}</p>
+                    </td>
                     <td className="py-3 px-4 text-muted-foreground">{p.peserta?.jenis_kursus}</td>
-                    <td className="py-3 px-4 text-muted-foreground">{p.peserta?.gelombang?.nama || '-'}</td>
                     <td className="py-3 px-4 text-muted-foreground text-xs">{formatDate(p.created_at)}</td>
                     <td className="py-3 px-4"><Badge variant={badgeVariant(p.status)}>{p.status}</Badge></td>
                     <td className="py-3 px-4">
@@ -184,7 +248,7 @@ export default function PembayaranPage() {
                           </button>
                         )}
                         {p.status === 'Valid' && (
-                          <button onClick={() => handlePrintKuitansi(p)} title="Cetak Kuitansi" className="p-1.5 rounded-lg hover:bg-miq-50 text-muted-foreground hover:text-miq-700 transition-colors">
+                          <button onClick={(e) => { e.stopPropagation(); handlePrintKuitansi([p]) }} title="Cetak Kuitansi" className="p-1.5 rounded-lg hover:bg-miq-50 text-muted-foreground hover:text-miq-700 transition-colors">
                             <Printer size={15} />
                           </button>
                         )}
@@ -295,29 +359,43 @@ export default function PembayaranPage() {
               <tr className="bg-gray-100">
                 <th className="border border-black px-4 py-2">No</th>
                 <th className="border border-black px-4 py-2">Nama Santri</th>
-                <th className="border border-black px-4 py-2">No Registrasi</th>
+                <th className="border border-black px-4 py-2">Kamar/Ruang</th>
+                <th className="border border-black px-4 py-2">Jenis Kursus</th>
                 <th className="border border-black px-4 py-2">Status</th>
                 <th className="border border-black px-4 py-2">Biaya</th>
               </tr>
             </thead>
             <tbody>
-              {printData.items.map((item, idx) => (
-                <tr key={idx}>
-                  <td className="border border-black px-4 py-2 text-center">{idx + 1}</td>
-                  <td className="border border-black px-4 py-2">{item.nama_santri}</td>
-                  <td className="border border-black px-4 py-2 text-center">{item.nomor_registrasi}</td>
-                  <td className="border border-black px-4 py-2 text-center">{item.status_pembayaran}</td>
-                  <td className="border border-black px-4 py-2 text-right">
-                    Rp {item.status_pembayaran === 'Valid' ? printData.biayaPerPeserta.toLocaleString('id-ID') : 0}
-                  </td>
-                </tr>
-              ))}
+              {printData.items.map((item, idx) => {
+                const biaya = jenisKursusMap[item.jenis_kursus] || 150000 // Fallback ke 150rb jika blm ada di db
+                return (
+                  <tr key={idx}>
+                    <td className="border border-black px-4 py-2 text-center">{idx + 1}</td>
+                    <td className="border border-black px-4 py-2">
+                      <p className="font-semibold">{item.nama_santri}</p>
+                      <p className="text-xs">{item.nomor_registrasi}</p>
+                    </td>
+                    <td className="border border-black px-4 py-2 text-center">
+                      <p className="font-semibold">{item.kamar?.nama_kamar || '-'}</p>
+                      <p className="text-xs">{item.ruangan?.nama_ruangan || '-'}</p>
+                    </td>
+                    <td className="border border-black px-4 py-2 text-center">{item.jenis_kursus}</td>
+                    <td className="border border-black px-4 py-2 text-center">{item.status_pembayaran}</td>
+                    <td className="border border-black px-4 py-2 text-right">
+                      Rp {item.status_pembayaran === 'Valid' ? biaya.toLocaleString('id-ID') : 0}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="4" className="border border-black px-4 py-2 font-bold text-right">TOTAL</td>
+                <td colSpan="5" className="border border-black px-4 py-2 font-bold text-right">TOTAL KESELURUHAN</td>
                 <td className="border border-black px-4 py-2 font-bold text-right">
-                  Rp {(printData.items.filter(i => i.status_pembayaran === 'Valid').length * printData.biayaPerPeserta).toLocaleString('id-ID')}
+                  Rp {(printData.items.reduce((acc, item) => {
+                    const biaya = jenisKursusMap[item.jenis_kursus] || 150000
+                    return acc + (item.status_pembayaran === 'Valid' ? biaya : 0)
+                  }, 0)).toLocaleString('id-ID')}
                 </td>
               </tr>
             </tfoot>
@@ -334,17 +412,9 @@ export default function PembayaranPage() {
             </div>
           </div>
           
-          {/* Controls for setting Biaya (hidden in print) */}
           <div className="mt-10 p-4 bg-gray-100 border rounded no-print">
-            <p className="font-semibold mb-2">Pengaturan Kuitansi (Tidak ikut tercetak)</p>
+            <p className="font-semibold mb-2">Aksi Kuitansi</p>
             <div className="flex items-center gap-2">
-              <label>Biaya per santri (Rp): </label>
-              <input 
-                type="number" 
-                value={biayaPerPeserta} 
-                onChange={e => setBiayaPerPeserta(Number(e.target.value))}
-                className="border p-1 rounded"
-              />
               <Button onClick={() => window.print()} variant="primary" size="sm">Print Ulang</Button>
               <Button onClick={() => setPrintData(null)} variant="secondary" size="sm">Tutup Kuitansi</Button>
             </div>

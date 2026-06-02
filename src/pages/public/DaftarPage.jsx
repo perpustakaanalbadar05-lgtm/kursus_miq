@@ -22,7 +22,7 @@ const step0Schema = z.object({
 const step1Schema = z.object({
   santri_list: z.array(z.object({
     nama_santri: z.string().min(3, 'Nama santri wajib diisi'),
-    jenis_kursus: z.enum(['Tartil Pemula', 'Tartil Melanjutkan'], { message: 'Pilih jenis kursus' }),
+    jenis_kursus: z.string().min(1, { message: 'Pilih jenis kursus' }),
   })).min(1, 'Minimal 1 santri'),
 })
 
@@ -281,6 +281,7 @@ export default function DaftarPage() {
     santri_list: [{ nama_santri: '', jenis_kursus: '' }]
   })
   const [gelombangList, setGelombangList] = useState([])
+  const [jenisKursusList, setJenisKursusList] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [successList, setSuccessList] = useState(null)
@@ -302,6 +303,11 @@ export default function DaftarPage() {
       .eq('status_aktif', true)
       .order('created_at', { ascending: false })
       .then(({ data }) => setGelombangList(data || []))
+
+    supabase
+      .from('jenis_kursus')
+      .select('*')
+      .then(({ data }) => setJenisKursusList(data || []))
   }, [])
 
   const onNext = handleSubmit((data) => {
@@ -467,15 +473,24 @@ export default function DaftarPage() {
                         error={errors.santri_list?.[index]?.nama_santri?.message} 
                         {...register(`santri_list.${index}.nama_santri`)} 
                       />
-                      <Select 
-                        label="Jenis Kursus *" 
-                        error={errors.santri_list?.[index]?.jenis_kursus?.message} 
-                        {...register(`santri_list.${index}.jenis_kursus`)}
-                      >
-                        <option value="">-- Pilih Jenis Kursus --</option>
-                        <option value="Tartil Pemula">Tartil Pemula</option>
-                        <option value="Tartil Melanjutkan">Tartil Melanjutkan</option>
-                      </Select>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-miq-900">Jenis Kursus *</label>
+                        <select
+                          {...register(`santri_list.${index}.jenis_kursus`)}
+                          className={cn(
+                            "w-full rounded-xl border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-miq-500/50",
+                            errors.santri_list?.[index]?.jenis_kursus ? 'border-red-400' : 'border-border'
+                          )}
+                        >
+                          <option value="">-- Pilih Jenis Kursus --</option>
+                          {jenisKursusList.map(jk => (
+                            <option key={jk.id} value={jk.nama}>{jk.nama} (Rp {jk.biaya.toLocaleString('id-ID')})</option>
+                          ))}
+                        </select>
+                        {errors.santri_list?.[index]?.jenis_kursus && (
+                          <p className="text-red-500 text-xs">{errors.santri_list[index].jenis_kursus.message}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
