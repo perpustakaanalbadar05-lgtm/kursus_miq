@@ -64,7 +64,7 @@ export function CardContent({ className, children }) {
 }
 
 // Input Component
-export function Input({ className, label, error, icon, ...props }) {
+export const Input = React.forwardRef(({ className, label, error, icon, ...props }, ref) => {
   return (
     <div className="space-y-1.5">
       {label && <label className="text-sm font-semibold text-foreground">{label}</label>}
@@ -75,6 +75,7 @@ export function Input({ className, label, error, icon, ...props }) {
           </div>
         )}
         <input
+          ref={ref}
           className={cn(
             'w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground',
             'placeholder:text-muted-foreground',
@@ -90,14 +91,16 @@ export function Input({ className, label, error, icon, ...props }) {
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   )
-}
+})
+Input.displayName = 'Input'
 
 // Select Component
-export function Select({ className, label, error, children, ...props }) {
+export const Select = React.forwardRef(({ className, label, error, children, ...props }, ref) => {
   return (
     <div className="space-y-1.5">
       {label && <label className="text-sm font-semibold text-foreground">{label}</label>}
       <select
+        ref={ref}
         className={cn(
           'w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground',
           'focus:outline-none focus:ring-2 focus:ring-miq-500/50 focus:border-miq-500',
@@ -112,14 +115,16 @@ export function Select({ className, label, error, children, ...props }) {
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   )
-}
+})
+Select.displayName = 'Select'
 
 // Textarea Component
-export function Textarea({ className, label, error, ...props }) {
+export const Textarea = React.forwardRef(({ className, label, error, ...props }, ref) => {
   return (
     <div className="space-y-1.5">
       {label && <label className="text-sm font-semibold text-foreground">{label}</label>}
       <textarea
+        ref={ref}
         className={cn(
           'w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground',
           'placeholder:text-muted-foreground resize-none',
@@ -133,7 +138,8 @@ export function Textarea({ className, label, error, ...props }) {
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   )
-}
+})
+Textarea.displayName = 'Textarea'
 
 // Badge Component
 export function Badge({ className, variant = 'default', children }) {
