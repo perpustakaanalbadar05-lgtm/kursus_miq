@@ -49,6 +49,34 @@ export const useAuthStore = create(
           set({ profile })
         }
       },
+
+      resetPassword: async (email) => {
+        set({ loading: true, error: null })
+        try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+          })
+          if (error) throw error
+          set({ loading: false })
+          return { success: true }
+        } catch (err) {
+          set({ error: err.message, loading: false })
+          return { success: false, error: err.message }
+        }
+      },
+
+      updatePassword: async (newPassword) => {
+        set({ loading: true, error: null })
+        try {
+          const { error } = await supabase.auth.updateUser({ password: newPassword })
+          if (error) throw error
+          set({ loading: false })
+          return { success: true }
+        } catch (err) {
+          set({ error: err.message, loading: false })
+          return { success: false, error: err.message }
+        }
+      },
     }),
     { name: 'miq-auth' }
   )

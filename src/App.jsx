@@ -10,6 +10,8 @@ import CekStatusPage from '@/pages/public/CekStatusPage'
 
 // Admin Pages
 import LoginPage from '@/pages/admin/LoginPage'
+import ForgotPasswordPage from '@/pages/admin/ForgotPasswordPage'
+import ResetPasswordPage from '@/pages/admin/ResetPasswordPage'
 import DashboardPage from '@/pages/admin/DashboardPage'
 import PesertaPage from '@/pages/admin/PesertaPage'
 import PembayaranPage from '@/pages/admin/PembayaranPage'
@@ -55,6 +57,8 @@ export default function App() {
 
         {/* Auth */}
         <Route path="/admin/login" element={<LoginPage />} />
+        <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Admin Protected */}
         <Route path="/admin" element={<AdminRoute><DashboardPage /></AdminRoute>} />
